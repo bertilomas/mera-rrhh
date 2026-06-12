@@ -819,18 +819,42 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 // ════════════════════════════════════════════
 const KEYS={users:'ms_users',comms:'ms_comms',schedules:'ms_schedules',recs:'ms_recs'}
 
-function load(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}}
-function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+// Safari iOS fix: fallback to in-memory if localStorage blocked
+const _mem={};
+function _getStorage(){
+  try{localStorage.setItem('__test','1');localStorage.removeItem('__test');return localStorage;}
+  catch(e){return null;}
+}
+const _store=_getStorage();
+function load(k){
+  try{
+    const raw=_store?_store.getItem(k):_mem[k]||null;
+    return raw?JSON.parse(raw):[];
+  }catch{return[];}
+}
+function save(k,v){
+  try{
+    const s=JSON.stringify(v);
+    if(_store)_store.setItem(k,s);
+    else _mem[k]=s;
+  }catch(e){_mem[k]=JSON.stringify(v);}
+}
 
 function initData(){
-  if(!localStorage.getItem(KEYS.users)){
-    save(KEYS.users,[
+  // Siempre garantizar que el usuario admin existe (fix Safari iOS)
+  const users=load(KEYS.users)
+  const hasAdmin=users.find(u=>u.username==='admin')
+  if(!hasAdmin){
+    const base=[
       {id:'admin',name:'Administrador RRHH',username:'admin',password:'1234',role:'admin',sector:'RRHH',puesto:'Administrador',email:'admin@merasolutions.com.ar',active:true},
       {id:'emp1',name:'Juan Martínez',username:'empleado',password:'1234',role:'employee',sector:'Ventas',puesto:'Analista',email:'jmartinez@merasolutions.com.ar',active:true},
       {id:'emp2',name:'María González',username:'mgonzalez',password:'1234',role:'employee',sector:'Administración',puesto:'Contadora',email:'mgonzalez@merasolutions.com.ar',active:true}
-    ])
+    ]
+    // Merge: mantener usuarios existentes y agregar los que faltan
+    base.forEach(b=>{ if(!users.find(u=>u.username===b.username)) users.push(b) })
+    save(KEYS.users,users)
   }
-  if(!localStorage.getItem(KEYS.comms)){
+  if(!load(KEYS.comms).length){
     const today=fmtDate(new Date())
     const yest=fmtDate(new Date(Date.now()-86400000))
     save(KEYS.comms,[
@@ -838,7 +862,7 @@ function initData(){
       {id:'c2',titulo:'Actualización de políticas de vacaciones',mensaje:'A partir del 1 de julio, el proceso de solicitud de vacaciones se realizará exclusivamente por este portal. Por favor, revisar el reglamento actualizado.',area:'RRHH',dest:'todos',sector:'',fecha:today,leido:[]}
     ])
   }
-  if(!localStorage.getItem(KEYS.schedules)){
+  if(!load(KEYS.schedules).length){
     const hoy=new Date()
     const entries=[]
     for(let i=-3;i<=10;i++){
@@ -855,7 +879,7 @@ function initData(){
     }
     save(KEYS.schedules,entries)
   }
-  if(!localStorage.getItem(KEYS.recs)){
+  if(!load(KEYS.recs).length){
     save(KEYS.recs,[
       {id:'r1',empId:'emp1',tipo:'reconocimiento',desc:'Excelente atención al cliente durante el cierre de trimestre',supervisor:'Sup. García',fecha:fmtDate(new Date(Date.now()-6*86400000))},
       {id:'r2',empId:'emp1',tipo:'sancion',desc:'Tardanza no justificada — 30 minutos',supervisor:'RRHH',fecha:fmtDate(new Date(Date.now()-9*86400000))},
